@@ -18,18 +18,25 @@ plugins {
     val kotlinVersion = "1.6.10"
     kotlin("multiplatform") version kotlinVersion
     `maven-publish`
+    id("com.android.library")
 }
-
 group = "com.github.nwillc"
+
 version = "3.1.0-SNAPSHOT"
 
 logger.lifecycle("${project.group}.${project.name}@${project.version}")
 
 repositories {
     mavenCentral()
+    google()
 }
 
 kotlin {
+    android()
+    androidNativeArm64()
+    androidNativeArm32()
+    androidNativeX64()
+    ios()
     jvm {
         compilations.forEach {
             it.kotlinOptions {
@@ -45,14 +52,20 @@ kotlin {
         }
         nodejs()
     }
+
     sourceSets {
-        commonTest {
+        val commonMain by getting
+
+        val commonTest by getting {
             dependencies {
                 implementation(kotlin("test-common"))
                 implementation(kotlin("test-annotations-common"))
             }
         }
 
+        val jvmMain by getting {
+            dependsOn(commonMain)
+        }
         val jvmTest by getting {
             dependencies {
                 implementation(kotlin("test-junit"))
@@ -62,6 +75,37 @@ kotlin {
         val jsTest by getting {
             dependencies {
                 implementation(kotlin("test-js"))
+            }
+        }
+
+        val androidNativeMain by sourceSets.creating {
+            dependsOn(commonMain)
+        }
+        val androidNativeTest by sourceSets.creating {
+            dependsOn(androidNativeMain)
+            dependsOn(commonTest)
+        }
+
+        val iosMain by sourceSets.getting {
+            dependsOn(commonMain)
+        }
+        val iosTest by sourceSets.getting {
+            dependsOn(commonTest)
+        }
+
+        targets.withType<org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget> {
+            val mainSourceSets = this.compilations.getByName("main").defaultSourceSet
+            val testSourceSets = this.compilations.getByName("test").defaultSourceSet
+            when {
+                konanTarget.family.isAppleFamily -> {
+                    mainSourceSets.dependsOn(iosMain)
+                    testSourceSets.dependsOn(iosTest)
+                }
+
+                konanTarget.family == org.jetbrains.kotlin.konan.target.Family.ANDROID -> {
+                    mainSourceSets.dependsOn(androidNativeMain)
+                    testSourceSets.dependsOn(androidNativeTest)
+                }
             }
         }
     }
@@ -75,3 +119,13 @@ tasks {
         }
     }
 }
+
+android {
+    compileSdk = 30
+    sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")
+    defaultConfig {
+        minSdk = 21
+        targetSdk = 30
+    }
+}
+
